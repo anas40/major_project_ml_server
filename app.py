@@ -1,7 +1,7 @@
 from flask import Flask, request, Response, abort
 import traceback
 import logging
-
+from model import compare_doc
 
 app = Flask(__name__)
 
@@ -18,9 +18,9 @@ def compare_data():
             raise Exception("Docs names not correct")
 
         # send data to model
-        print("First doc : ", first)
+        result = compare_doc(first,second)
 
-        return "OK"
+        return result
     except Exception as e:
         logging.error(traceback.format_exc())
         return Response(response="Bad Request", status=400)
