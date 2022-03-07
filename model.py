@@ -14,98 +14,98 @@ import nltk
 nltk.download('stopwords')
 
 
-
 model = api.load("glove-wiki-gigaword-50")
-model_dimensions = 300
 
-def compare_doc(doc1, doc2):
-    documents = doc1+doc2
-    documents_df = pd.DataFrame(documents, columns=['documents'])
-    print(documents_df)
 
-    # removing special characters and stop words from the text
-    stop_words_l = stopwords.words('english')
-    documents_df['documents_cleaned'] = documents_df.documents.apply(lambda x: " ".join(re.sub(
-        r'[^a-zA-Z]', ' ', w).lower() for w in x.split() if re.sub(r'[^a-zA-Z]', ' ', w).lower() not in stop_words_l))
+def clean_document(document):
+    stop_words = stopwords.words('english')
 
-    tokenizer = Tokenizer()
-    tokenizer.fit_on_texts(documents_df.documents_cleaned)
+    cleaned_document = document.apply(lambda x: " ".join(
+        re.sub(r'[^a-zA-Z]', ' ', w).lower() for w in x.split() if re.sub(r'[^a-zA-Z]', ' ', w).lower() not in stop_words_l))
 
-    # converted text to indexes
-    tokenized_documents = tokenizer.texts_to_sequences(
-        documents_df.documents_cleaned)
-    tokenized_paded_documents = pad_sequences(
-        tokenized_documents, maxlen=64, padding='post')
-    vocab_size = len(tokenizer.word_index)+1
+    return cleaned_document
 
-    # print("Vocab size : ", vocab_size)
-    # six sentences, each of 64 length
-    # print("Padded document shape : ", tokenized_paded_documents.shape)
-    # print("Padded document : ", tokenized_paded_documents[0])
 
-    # creating embedding matrix, every row is a vector representation from the vocabulary indexed by the tokenizer index.
+def compare_sentence(sentence1, sentence2):
+    return 1
 
-    # creating 0 filled matrix of size vocab_sizexmodel_dimensions
+
+def get_embedding_matrix(vocab_size, model_dimensions, tokenizer):
     embedding_matrix = np.zeros((vocab_size, model_dimensions))
-    print("Embedding matrix dimensions : ", embedding_matrix.shape)
 
     for word, i in tokenizer.word_index.items():
         if word in model:
             embedding_matrix[i] = model[word]
 
-    # print(len(embedding_matrix[1]),embedding_matrix[1])
+    return embedding_matrix
 
-    tfidfvectoriser = TfidfVectorizer(max_features=300)
-    tfidfvectoriser.fit(documents_df.documents_cleaned)
-    tfidf_vectors = tfidfvectoriser.transform(
-        documents_df.documents_cleaned).toarray()
 
-    # representing every paragraph with vocab_size (91)
-    print(tfidf_vectors[0])
-    # pairwise_similarities=np.dot(tfidf_vectors,tfidf_vectors.T).toarray()
-    # pairwise_differences=euclidean_distances(tfidf_vectors)
+def get_tfidf_vectors(model_dimensions, document):
+    tfidfvectoriser = TfidfVectorizer(max_features=model_dimensions)
+    tfidfvectoriser.fit(document)
+    tfidf_vectors = tfidfvectoriser.transform(document).toarray()
+    return tfidf_vectors
 
-    def most_similar(doc_id, similarity_matrix):
-        # print (f'Document: {documents_df.iloc[doc_id]["documents"]}')
-        # print ('\n')
-        # print ('Similar Documents:')
 
-        similar_ix = np.argsort(similarity_matrix[doc_id])[::-1]
+def get_weighted_embeddings(padded_doc, model_dimensions, words_doc, tokenizer, embedding_matrix, tfidf_vectors):
+    doc_embeddings = np.zeros((len(padded_doc), model_dimensions))
 
-        for ix in similar_ix:
-            if ix == doc_id:
-                continue
-            print('\n')
-            print(f'Document: {documents_df.iloc[ix]["documents"]}')
-            print("Cosine similarity : ", similarity_matrix[doc_id][ix])
-
-    # calculating average of word vectors of a document weighted by tf-idf
-    document_embeddings = np.zeros(
-        (len(tokenized_paded_documents), model_dimensions))
-    words = tfidfvectoriser.get_feature_names_out()
-
-    # print("Document embeddings shape : ", document_embeddings.shape)
-    # print("Total words : ", len(words))
-    # print("TFIDF vector shape : ", tfidf_vectors.shape)
-    # print("Embedding matrix shape : ", embedding_matrix.shape)
-    # print("Word : ", words[0], ", Word index : ",
-    #       tokenizer.word_index[words[0]])
-
-    print(tfidf_vectors[0])
-    # print(embedding_matrix[tokenizer.word_index[words[0]]].shape)
-    for i in range(len(tokenized_paded_documents)):
-        for j in range(len(words)):
-            embedding = embedding_matrix[tokenizer.word_index[words[j]]]
+    for i in range(len(padded_doc)):
+        for j in range(len(words_doc)):
+            word = words_doc[j]
+            token = tokenizer.word_index[word]
+            embedding = embedding_matrix[token]
             tfidf_vector = tfidf_vectors[i][j]
-            document_embeddings[i] += embedding*tfidf_vector
+            doc_embeddings[i] += embedding*tfidf_vector
 
-    # document_embeddings=document_embeddings/np.sum(tfidf_vectors,axis=1).reshape(-1,1)
+    return doc_embeddings
 
-    document_embeddings.shape
 
-    pairwise_similarities = cosine_similarity(document_embeddings)
-    print(pairwise_similarities.shape, pairwise_similarities)
 
-    most_similar(0, pairwise_similarities)
+def compare_doc(doc1, doc2):
+
+    doc1_df = pd.DataFrame(doc1, columns=['documents'])
+    doc2_df = pd.DataFrame(doc2, columns=['documents'])
+
+    # 0 clean both the documents
+    cleaned_doc1_df = clean_document(doc1_df)
+    cleaned_doc2_df = clean_document(doc2_df)
+
+    # 1 create tokenizer for full corpus
+    tokenizer = Tokenizer()
+    tokenizer.fit_on_texts(cleaned_doc1_df)
+    tokenizer.fit_on_texts(cleaned_doc2_df)
+
+    # 2 converted text to indexes
+    tokenized_doc1 = tokenizer.texts_to_sequences(cleaned_doc1_df)
+    tokenized_doc2 = tokenizer.texts_to_sequences(cleaned_doc2_df)
+
+    # 3 pad the sentences
+    padded_doc1 = pad_sequences(tokenized_doc1, maxlen=64, padding='post')
+    padded_doc2 = pad_sequences(tokenized_doc2, maxlen=64, padding='post')
+
+
+    vocab_size = len(tokenizer.word_index)+1
+    model_dimensions = 300
+    embedding_matrix = get_embedding_matrix(vocab_size, model_dimensions, tokenizer)
+
+    # 4 create tfidf for each document separately
+    tfidf_vectors1 = get_tfidf_vectors(model_dimensions, cleaned_doc1_df)
+    tfidf_vectors2 = get_tfidf_vectors(model_dimensions, cleaned_doc2_df)
+
+   
+    # document embeddings
+    doc1_embeddings = get_weighted_embeddings(
+        padded_doc1, model_dimensions, words_doc1, tokenizer, embedding_matrix, tfidf_vectors1)
+    doc2_embeddings = get_weighted_embeddings(
+        padded_doc2, model_dimensions, words_doc2, tokenizer, embedding_matrix, tfidf_vectors2)
+
+
+    #docuement wise tifidf features 
+    words_doc1 = tfidf_vectors1.get_feature_names_out()
+    words_doc2 = tfidf_vectors2.get_feature_names_out()
+
+
+    pairwise_similarities = cosine_similarity(doc1_embeddings, doc2_embeddings)
 
     return pairwise_similarities
